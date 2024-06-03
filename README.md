@@ -81,7 +81,7 @@ To duplicate the parent's address space, set up the PTE in the child's page tabl
 - Implement features in an incremental way; implement the allocation/deallocation functions first to get used to the page table/PTE manipulation. And then move on to implement the fork by duplicating the page table contents. You need to manipulate both PTEs of parent and child to support copy-on-write properly. TLB can be implemented later on.
 - Be careful to handle `rw` bit in the page table when you attach a page or share it. Read-only pages should not be writable after the fork whereas writable pages should be writable after the fork through the copy-on-write mechanism. You may leverage the `private` variable in `struct pte` to implement this feature.
 - Like previous PAs, printing out to stdout does not influence on the grading. So, feel free to print out debug message using `printf`.
-- Submissions are limited to 30 times.
+- Submissions are limited to 20 times.
 
 ### Submission / Grading
 - Total: 600 pts + 10 pts
