@@ -102,8 +102,33 @@ void insert_tlb(unsigned int vpn, unsigned int rw, unsigned int pfn)
  */
 unsigned int alloc_page(unsigned int vpn, unsigned int rw)
 {
-	return -1;
+    for (unsigned int pfn = 0; pfn < NR_PAGEFRAMES; pfn++) {
+        if (mapcounts[pfn] == 0) {
+            mapcounts[pfn] = 1;
+
+            int page_dir_idx = vpn / NR_PTES_PER_PAGE;
+            int page_entry_idx = vpn - page_dir_idx*NR_PTES_PER_PAGE;
+
+            struct pte_directory *pd = current->pagetable.pdes[page_dir_idx];
+
+            if (!pd) {
+                pd = (struct pte_directory *)malloc(sizeof(struct pte_directory));
+                current->pagetable.pdes[page_dir_idx] = pd;
+            }
+
+            struct pte *pte = &pd->ptes[page_entry_idx];
+            pte->valid = true;
+            pte->rw = rw;
+            pte->pfn = pfn;
+
+            return pfn;
+        }
+    }
+    return (unsigned int)-1;
 }
+
+
+
 
 
 /**
@@ -117,7 +142,21 @@ unsigned int alloc_page(unsigned int vpn, unsigned int rw)
  */
 void free_page(unsigned int vpn)
 {
+    int page_dir_idx = vpn / NR_PTES_PER_PAGE;
+    int page_entry_idx = vpn - page_dir_idx;
+    struct pte_directory *pd = current->pagetable.pdes[page_dir_idx];
+    if (pd) {
+        struct pte *pte = &pd->ptes[page_entry_idx];
+        if (pte->valid) {
+            mapcounts[pte->pfn]--;
+            pte->valid = false;
+            pte->rw = 0;
+            pte->pfn = 0;
+        }
+    }
 }
+
+
 
 
 /**
