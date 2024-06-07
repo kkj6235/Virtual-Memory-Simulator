@@ -15,6 +15,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "list_head.h"
 #include "vm.h"
@@ -120,7 +121,6 @@ unsigned int alloc_page(unsigned int vpn, unsigned int rw)
             pte->valid = true;
             pte->rw = rw;
             pte->pfn = pfn;
-
             return pfn;
         }
     }
@@ -143,7 +143,8 @@ unsigned int alloc_page(unsigned int vpn, unsigned int rw)
 void free_page(unsigned int vpn)
 {
     int page_dir_idx = vpn / NR_PTES_PER_PAGE;
-    int page_entry_idx = vpn - page_dir_idx;
+    int page_entry_idx = vpn - page_dir_idx*NR_PTES_PER_PAGE;
+
     struct pte_directory *pd = current->pagetable.pdes[page_dir_idx];
     if (pd) {
         struct pte *pte = &pd->ptes[page_entry_idx];
@@ -175,10 +176,54 @@ void free_page(unsigned int vpn)
  *   @true on successful fault handling
  *   @false otherwise
  */
-bool handle_page_fault(unsigned int vpn, unsigned int rw)
-{
-	return false;
+#include "vm.h"
+
+bool handle_page_fault(unsigned int vpn, unsigned int rw) {
+    int page_dir_idx = vpn / NR_PTES_PER_PAGE;
+    int page_entry_idx = vpn - page_dir_idx*NR_PTES_PER_PAGE;
+
+    struct pte_directory *pd = current->pagetable.pdes[page_dir_idx];
+    struct pte *pte;
+
+    if (!pd) {
+        pd = malloc(sizeof(struct pte_directory));
+        memset(pd, 0, sizeof(struct pte_directory));
+        current->pagetable.pdes[page_dir_idx] = pd;
+    }
+
+    pte = &pd->ptes[page_entry_idx];
+
+    if (!pte->valid) {
+        if (alloc_page(vpn, rw) == (unsigned int)-1) return false;
+        return true;
+    }
+
+    if (!(pte->rw & rw)) {
+        if (rw & ACCESS_WRITE) {
+            if (pte->rw & ACCESS_READ) {
+                if (mapcounts[pte->pfn] > 1) {
+                    unsigned int old_pfn = pte->pfn;
+                    unsigned int new_pfn = alloc_page(vpn, 3);
+                    mapcounts[old_pfn]--;
+                    pte->pfn = new_pfn;
+                    pte->rw |= ACCESS_WRITE;
+
+                    return true;
+                } else {
+//                    fprintf(stderr,"여기")
+//                     참조하고 있는게 없으므로 false로 가야지..
+                    pte->rw |= ACCESS_WRITE;
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    return true;
 }
+
+
 
 
 /**
@@ -199,7 +244,51 @@ bool handle_page_fault(unsigned int vpn, unsigned int rw)
  *   bit in PTE and mapcounts for shared pages. You may use pte->private for 
  *   storing some useful information :-)
  */
-void switch_process(unsigned int pid)
-{
+void switch_process(unsigned int pid) {
+    struct process *next = NULL;
+    struct process *p = NULL;
+
+    list_for_each_entry(p,&processes,list){
+        if(p->pid==pid){
+            next = p;
+            break;
+        }
+    }
+
+    if (!next) {
+        next = malloc(sizeof(struct process));
+        memset(&next->pagetable, 0, sizeof(struct pagetable));
+        next->pid = pid;
+        INIT_LIST_HEAD(&next->list);
+
+        for (int i = 0; i < NR_PDES_PER_PAGE; i++) {
+            if (current->pagetable.pdes[i] != NULL) {
+                next->pagetable.pdes[i] = malloc(sizeof(struct pte_directory));
+                memset(next->pagetable.pdes[i], 0, sizeof(struct pte_directory));
+
+                for (int j = 0; j < NR_PTES_PER_PAGE; j++) {
+                    next->pagetable.pdes[i]->ptes[j] = current->pagetable.pdes[i]->ptes[j];
+                    if (current->pagetable.pdes[i]->ptes[j].valid) {
+                        next->pagetable.pdes[i]->ptes[j].valid = true;
+//                        if (next->pagetable.pdes[i]->ptes[j].rw & ACCESS_WRITE) {
+//                            next->pagetable.pdes[i]->ptes[j].rw &= ~ACCESS_WRITE;
+//                        }
+                        current->pagetable.pdes[i]->ptes[j].rw = ACCESS_READ;
+                        next->pagetable.pdes[i]->ptes[j].rw = ACCESS_READ;
+                        next->pagetable.pdes[i]->ptes[j].pfn = current->pagetable.pdes[i]->ptes[j].pfn;
+                        mapcounts[next->pagetable.pdes[i]->ptes[j].pfn]++;
+                    }
+                }
+            }
+        }
+    }
+    else{
+        list_del_init(&next->list);
+    }
+    list_add_tail(&current->list, &processes);
+    current = next;
+    ptbr = &current->pagetable;
 }
+
+
 
