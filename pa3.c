@@ -198,24 +198,22 @@ bool handle_page_fault(unsigned int vpn, unsigned int rw) {
         return true;
     }
 
-    if (!(pte->rw & rw)) {
-        if (rw & ACCESS_WRITE) {
+    if (pte->rw != rw && rw & ACCESS_WRITE) {
             if (pte->rw & ACCESS_READ) {
                 if (mapcounts[pte->pfn] > 1) {
                     unsigned int old_pfn = pte->pfn;
                     unsigned int new_pfn = alloc_page(vpn, 3);
                     mapcounts[old_pfn]--;
-                    pte->pfn = new_pfn;
                     pte->rw |= ACCESS_WRITE;
+                    pte->pfn = new_pfn;
 
                     return true;
                 } else {
-//                    fprintf(stderr,"여기")
-//                     참조하고 있는게 없으므로 false로 가야지..
-                    pte->rw |= ACCESS_WRITE;
-                    return true;
+                    if(pte->private & ACCESS_WRITE){
+                        pte->rw |= ACCESS_WRITE;
+                        return true;
+                    }
                 }
-            }
         }
         return false;
     }
@@ -273,6 +271,7 @@ void switch_process(unsigned int pid) {
 //                        if (next->pagetable.pdes[i]->ptes[j].rw & ACCESS_WRITE) {
 //                            next->pagetable.pdes[i]->ptes[j].rw &= ~ACCESS_WRITE;
 //                        }
+                        current->pagetable.pdes[i]->ptes[j].private = current->pagetable.pdes[i]->ptes[j].rw;
                         current->pagetable.pdes[i]->ptes[j].rw = ACCESS_READ;
                         next->pagetable.pdes[i]->ptes[j].rw = ACCESS_READ;
                         next->pagetable.pdes[i]->ptes[j].pfn = current->pagetable.pdes[i]->ptes[j].pfn;
