@@ -199,20 +199,19 @@ bool handle_page_fault(unsigned int vpn, unsigned int rw) {
     }
 
     if (pte->rw != rw && rw & ACCESS_WRITE) {
-            if (pte->rw & ACCESS_READ) {
-                if (mapcounts[pte->pfn] > 1) {
+            if (pte->rw & ACCESS_READ && pte->private & ACCESS_WRITE) {
+                if (mapcounts[pte->pfn] > 1){
+//                    fprintf(stderr, "private : %d\n",pte->private);
                     unsigned int old_pfn = pte->pfn;
                     unsigned int new_pfn = alloc_page(vpn, 3);
                     mapcounts[old_pfn]--;
                     pte->rw |= ACCESS_WRITE;
                     pte->pfn = new_pfn;
-
                     return true;
                 } else {
-                    if(pte->private & ACCESS_WRITE){
-                        pte->rw |= ACCESS_WRITE;
-                        return true;
-                    }
+                    pte->rw |= ACCESS_WRITE;
+                    return true;
+
                 }
         }
         return false;
@@ -220,6 +219,7 @@ bool handle_page_fault(unsigned int vpn, unsigned int rw) {
 
     return true;
 }
+
 
 
 
@@ -271,11 +271,15 @@ void switch_process(unsigned int pid) {
 //                        if (next->pagetable.pdes[i]->ptes[j].rw & ACCESS_WRITE) {
 //                            next->pagetable.pdes[i]->ptes[j].rw &= ~ACCESS_WRITE;
 //                        }
-                        current->pagetable.pdes[i]->ptes[j].private = current->pagetable.pdes[i]->ptes[j].rw;
+                        if(!current->pagetable.pdes[i]->ptes[j].private){
+                            current->pagetable.pdes[i]->ptes[j].private = current->pagetable.pdes[i]->ptes[j].rw;
+                            next->pagetable.pdes[i]->ptes[j].private = current->pagetable.pdes[i]->ptes[j].rw;
+                        }
                         current->pagetable.pdes[i]->ptes[j].rw = ACCESS_READ;
                         next->pagetable.pdes[i]->ptes[j].rw = ACCESS_READ;
                         next->pagetable.pdes[i]->ptes[j].pfn = current->pagetable.pdes[i]->ptes[j].pfn;
                         mapcounts[next->pagetable.pdes[i]->ptes[j].pfn]++;
+//                        fprintf(stderr, "%d %d %d %d\n",current->pid,j,current->pagetable.pdes[i]->ptes[j].private,next->pagetable.pdes[i]->ptes[j].private);
                     }
                 }
             }
