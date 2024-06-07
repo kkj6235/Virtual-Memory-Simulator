@@ -65,6 +65,12 @@ extern unsigned int mapcounts[];
  */
 bool lookup_tlb(unsigned int vpn, unsigned int rw, unsigned int *pfn)
 {
+    for(int i=0;i<NR_TLB_ENTRIES;i++){
+        if(tlb[i].vpn==vpn && tlb[i].rw&rw){
+            *pfn = tlb[i].pfn;
+            return true;
+        }
+    }
 	return false;
 }
 
@@ -80,8 +86,27 @@ bool lookup_tlb(unsigned int vpn, unsigned int rw, unsigned int *pfn)
  *   Also, in the current simulator, TLB is big enough to cache all the entries of
  *   the current page table, so don't worry about TLB entry eviction. ;-)
  */
-void insert_tlb(unsigned int vpn, unsigned int rw, unsigned int pfn)
-{
+void insert_tlb(unsigned int vpn, unsigned int rw, unsigned int pfn){
+    int idx = -1;
+
+    for(int i=0;i<NR_TLB_ENTRIES;i++){
+        if(tlb[i].vpn==vpn){
+            tlb[i].valid = true;
+            tlb[i].rw = rw;
+            tlb[i].pfn = pfn;
+            return ;
+        }
+        if(tlb[i].valid==false&& idx==-1){
+            idx = i;
+            break;
+        }
+    }
+    if(idx!=-1){
+        tlb[idx].valid = true;
+        tlb[idx].pfn = pfn;
+        tlb[idx].rw = rw;
+        tlb[idx].vpn = vpn;
+    }
 }
 
 
