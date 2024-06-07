@@ -175,11 +175,20 @@ void free_page(unsigned int vpn)
         struct pte *pte = &pd->ptes[page_entry_idx];
         if (pte->valid) {
             mapcounts[pte->pfn]--;
+            for(int i=0;i<NR_TLB_ENTRIES;i++){
+                if(tlb[i].valid && tlb[i].pfn==pte->pfn){
+                    tlb[i].valid = false;
+                    tlb[i].rw=0;
+                    tlb[i].pfn = 0;
+                }
+            }
             pte->valid = false;
             pte->rw = 0;
             pte->pfn = 0;
         }
     }
+
+
 }
 
 
