@@ -63,15 +63,14 @@ extern unsigned int mapcounts[];
  *   Return true if the translation is cached in the TLB.
  *   Return false otherwise
  */
-bool lookup_tlb(unsigned int vpn, unsigned int rw, unsigned int *pfn)
-{
-    for(int i=0;i<NR_TLB_ENTRIES;i++){
-        if(tlb[i].vpn==vpn && tlb[i].rw&rw){
+bool lookup_tlb(unsigned int vpn, unsigned int rw, unsigned int *pfn) {
+    for (int i = 0; i < NR_TLB_ENTRIES; i++) {
+        if (tlb[i].vpn == vpn && tlb[i].rw & rw) {
             *pfn = tlb[i].pfn;
             return true;
         }
     }
-	return false;
+    return false;
 }
 
 
@@ -86,22 +85,27 @@ bool lookup_tlb(unsigned int vpn, unsigned int rw, unsigned int *pfn)
  *   Also, in the current simulator, TLB is big enough to cache all the entries of
  *   the current page table, so don't worry about TLB entry eviction. ;-)
  */
-void insert_tlb(unsigned int vpn, unsigned int rw, unsigned int pfn){
+void insert_tlb(unsigned int vpn, unsigned int rw, unsigned int pfn) {
     int idx = -1;
+//    fprintf(stderr, "current : %d\n", current->pid);
+    for (int i = 0; i < NR_TLB_ENTRIES; i++) {
+//        fprintf(stderr, "tlb[%d] :  %d %d\n", i, tlb[i].vpn, tlb[i].pfn);
 
-    for(int i=0;i<NR_TLB_ENTRIES;i++){
-        if(tlb[i].vpn==vpn){
-            tlb[i].valid = true;
-            tlb[i].rw = rw;
-            tlb[i].pfn = pfn;
-            return ;
-        }
-        if(tlb[i].valid==false&& idx==-1){
+        if (tlb[i].valid == false && idx == -1) {
             idx = i;
             break;
         }
+        if (tlb[i].vpn == vpn) {
+//            fprintf(stderr, "%d %d %d %d\n",i,vpn,pfn,tlb[i].pfn);
+            tlb[i].valid = true;
+            tlb[i].rw = rw;
+            tlb[i].pfn = pfn;
+            return;
+        }
     }
-    if(idx!=-1){
+    if (idx != -1) {
+//        fprintf(stderr, "insert : %d %d %d\n",idx,vpn,pfn);
+
         tlb[idx].valid = true;
         tlb[idx].pfn = pfn;
         tlb[idx].rw = rw;
@@ -126,19 +130,18 @@ void insert_tlb(unsigned int vpn, unsigned int rw, unsigned int pfn){
  *   Return allocated page frame number.
  *   Return -1 if all page frames are allocated.
  */
-unsigned int alloc_page(unsigned int vpn, unsigned int rw)
-{
+unsigned int alloc_page(unsigned int vpn, unsigned int rw) {
     for (unsigned int pfn = 0; pfn < NR_PAGEFRAMES; pfn++) {
         if (mapcounts[pfn] == 0) {
             mapcounts[pfn] = 1;
 
             int page_dir_idx = vpn / NR_PTES_PER_PAGE;
-            int page_entry_idx = vpn - page_dir_idx*NR_PTES_PER_PAGE;
+            int page_entry_idx = vpn - page_dir_idx * NR_PTES_PER_PAGE;
 
             struct pte_directory *pd = current->pagetable.pdes[page_dir_idx];
 
             if (!pd) {
-                pd = (struct pte_directory *)malloc(sizeof(struct pte_directory));
+                pd = (struct pte_directory *) malloc(sizeof(struct pte_directory));
                 current->pagetable.pdes[page_dir_idx] = pd;
             }
 
@@ -149,11 +152,8 @@ unsigned int alloc_page(unsigned int vpn, unsigned int rw)
             return pfn;
         }
     }
-    return (unsigned int)-1;
+    return (unsigned int) -1;
 }
-
-
-
 
 
 /**
@@ -165,20 +165,19 @@ unsigned int alloc_page(unsigned int vpn, unsigned int rw)
  *   Also, consider the case when a page is shared by two processes,
  *   and one process is about to free the page. Also, think about TLB as well ;-)
  */
-void free_page(unsigned int vpn)
-{
+void free_page(unsigned int vpn) {
     int page_dir_idx = vpn / NR_PTES_PER_PAGE;
-    int page_entry_idx = vpn - page_dir_idx*NR_PTES_PER_PAGE;
+    int page_entry_idx = vpn - page_dir_idx * NR_PTES_PER_PAGE;
 
     struct pte_directory *pd = current->pagetable.pdes[page_dir_idx];
     if (pd) {
         struct pte *pte = &pd->ptes[page_entry_idx];
         if (pte->valid) {
             mapcounts[pte->pfn]--;
-            for(int i=0;i<NR_TLB_ENTRIES;i++){
-                if(tlb[i].valid && tlb[i].pfn==pte->pfn){
+            for (int i = 0; i < NR_TLB_ENTRIES; i++) {
+                if (tlb[i].valid && tlb[i].pfn == pte->pfn) {
                     tlb[i].valid = false;
-                    tlb[i].rw=0;
+                    tlb[i].rw = 0;
                     tlb[i].pfn = 0;
                 }
             }
@@ -214,7 +213,7 @@ void free_page(unsigned int vpn)
 
 bool handle_page_fault(unsigned int vpn, unsigned int rw) {
     int page_dir_idx = vpn / NR_PTES_PER_PAGE;
-    int page_entry_idx = vpn - page_dir_idx*NR_PTES_PER_PAGE;
+    int page_entry_idx = vpn - page_dir_idx * NR_PTES_PER_PAGE;
 
     struct pte_directory *pd = current->pagetable.pdes[page_dir_idx];
     struct pte *pte;
@@ -228,34 +227,31 @@ bool handle_page_fault(unsigned int vpn, unsigned int rw) {
     pte = &pd->ptes[page_entry_idx];
 
     if (!pte->valid) {
-        if (alloc_page(vpn, rw) == (unsigned int)-1) return false;
+        if (alloc_page(vpn, rw) == (unsigned int) -1) return false;
         return true;
     }
 
     if (pte->rw != rw && rw & ACCESS_WRITE) {
-            if (pte->rw & ACCESS_READ && pte->private & ACCESS_WRITE) {
-                if (mapcounts[pte->pfn] > 1){
+        if (pte->rw & ACCESS_READ && pte->private & ACCESS_WRITE) {
+            if (mapcounts[pte->pfn] > 1) {
 //                    fprintf(stderr, "private : %d\n",pte->private);
-                    unsigned int old_pfn = pte->pfn;
-                    unsigned int new_pfn = alloc_page(vpn, 3);
-                    mapcounts[old_pfn]--;
-                    pte->rw |= ACCESS_WRITE;
-                    pte->pfn = new_pfn;
-                    return true;
-                } else {
-                    pte->rw |= ACCESS_WRITE;
-                    return true;
+                unsigned int old_pfn = pte->pfn;
+                unsigned int new_pfn = alloc_page(vpn, 3);
+                mapcounts[old_pfn]--;
+                pte->rw |= ACCESS_WRITE;
+                pte->pfn = new_pfn;
+                return true;
+            } else {
+                pte->rw |= ACCESS_WRITE;
+                return true;
 
-                }
+            }
         }
         return false;
     }
 
     return true;
 }
-
-
-
 
 
 /**
@@ -279,9 +275,8 @@ bool handle_page_fault(unsigned int vpn, unsigned int rw) {
 void switch_process(unsigned int pid) {
     struct process *next = NULL;
     struct process *p = NULL;
-
-    list_for_each_entry(p,&processes,list){
-        if(p->pid==pid){
+    list_for_each_entry(p, &processes, list) {
+        if (p->pid == pid) {
             next = p;
             break;
         }
@@ -305,7 +300,7 @@ void switch_process(unsigned int pid) {
 //                        if (next->pagetable.pdes[i]->ptes[j].rw & ACCESS_WRITE) {
 //                            next->pagetable.pdes[i]->ptes[j].rw &= ~ACCESS_WRITE;
 //                        }
-                        if(!current->pagetable.pdes[i]->ptes[j].private){
+                        if (!current->pagetable.pdes[i]->ptes[j].private) {
                             current->pagetable.pdes[i]->ptes[j].private = current->pagetable.pdes[i]->ptes[j].rw;
                             next->pagetable.pdes[i]->ptes[j].private = current->pagetable.pdes[i]->ptes[j].rw;
                         }
@@ -318,9 +313,20 @@ void switch_process(unsigned int pid) {
                 }
             }
         }
-    }
-    else{
+
+    } else {
         list_del_init(&next->list);
+    }
+//    memset(tlb,0,sizeof(struct tlb_entry));
+    for (int i = 0; i < NR_TLB_ENTRIES; i++) {
+        if (tlb[i].valid == false) {
+            break;
+        }
+        tlb[i].valid = false;
+        tlb[i].rw = 0;
+        tlb[i].vpn = 0;
+        tlb[i].pfn = 0;
+        tlb[i].private = 0;
     }
     list_add_tail(&current->list, &processes);
     current = next;
